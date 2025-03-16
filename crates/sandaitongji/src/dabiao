@@ -1,0 +1,174 @@
+use reqwest::Client;
+use serde_json::{json, Value};
+use std::{error::Error, fs};
+use tokio;
+
+// 获取门店名称：请求 /api3/users，然后找出含有非空 aps 的用户
+async fn get_store_name(client: &Client, ew_ip: &str, port: &str) -> Result<String, Box<dyn Error>> {
+    let url = format!("http://{}:{}/api3/users", ew_ip, port);
+    let resp = client.get(&url).send().await?;
+    let json_data: Value = resp.json().await?;
+    if let Some(data) = json_data.get("data").and_then(|d| d.as_array()) {
+        for item in data {
+            if let Some(aps) = item.get("aps").and_then(|a| a.as_array()) {
+                if !aps.is_empty() {
+                    if let Some(user) = item.get("user").and_then(|u| u.as_str()) {
+                        return Ok(user.to_string());
+                    }
+                }
+            }
+        }
+    }
+    Err("No store found".into())
+}
+
+// 获取 AP 版本：请求 /api3/{store_name}/aps，取在线的 AP 的 version 和 ip
+async fn get_aps_version(client: &Client, ew_ip: &str, port: &str, store_name: &str) -> Result<(String, String), Box<dyn Error>> {
+    let url = format!("http://{}:{}/api3/{}/aps", ew_ip, port, store_name);
+    println!("get_aps_version URL: {}", url);
+    let resp = client.get(&url).send().await?;
+    let json_data: Value = resp.json().await?;
+    let mut versions = Vec::new();
+    let mut ip_addr = String::new();
+    if let Some(g2_array) = json_data.get("data").and_then(|d| d.get("G2")).and_then(|v| v.as_array()) {
+        for item in g2_array {
+            if item.get("online").and_then(|o| o.as_bool()).unwrap_or(false) {
+                if let Some(version) = item.get("version").and_then(|v| v.as_str()) {
+                    versions.push(version.to_string());
+                }
+                if let Some(ip) = item.get("ip").and_then(|i| i.as_str()) {
+                    ip_addr = ip.to_string();
+                }
+                if let Some(seq) = item.get("seqence").and_then(|s| s.as_str()) {
+                    println!("Sequence is {}", seq);
+                }
+            }
+        }
+    }
+    if versions.is_empty() {
+        return Err("No online AP found".into());
+    }
+    if versions.iter().collect::<std::collections::HashSet<_>>().len() > 1 {
+        println!("当前有多个基站在线，且版本不同");
+    }
+    Ok((versions[0].clone(), ip_addr))
+}
+
+// 获取 ESL 列表：请求 /api3/{store_name}/esls/page/1，然后（如有多页）依次取数据，返回在线价签 ID 列表
+async fn get_esl_version(client: &Client, ew_ip: &str, port: &str, store_name: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut eslids = Vec::new();
+    let mut url = format!("http://{}:{}/api3/{}/esls/page/1", ew_ip, port, store_name);
+    println!("get_esl_version URL: {}", url);
+    let resp = client.get(&url).send().await?;
+    let mut json_data: Value = resp.json().await?;
+    let total_page = json_data.get("data").and_then(|d| d.get("total_page")).and_then(|v| v.as_i64()).unwrap_or(1);
+    if let Some(esls) = json_data.get("data").and_then(|d| d.get("esls")).and_then(|v| v.as_array()) {
+        for esl in esls {
+            if let Some(id) = esl.get("esl_id").and_then(|v| v.as_str()) {
+                eslids.push(id.to_string());
+            }
+            if let Some(status) = esl.get("last_work_status").and_then(|v| v.as_str()) {
+                if status != "online" {
+                    println!("状态不是online的价签：{:?}", esl);
+                }
+            }
+        }
+    }
+    if total_page > 1 {
+        for i in 2..=total_page {
+            url = format!("http://{}:{}/api3/{}/esls/page/{}", ew_ip, port, store_name, i);
+            let resp = client.get(&url).send().await?;
+            let json_data: Value = resp.json().await?;
+            if let Some(esls) = json_data.get("data").and_then(|d| d.get("esls")).and_then(|v| v.as_array()) {
+                // 这里简单覆盖 eslids（实际业务可能需要合并所有页的数据）
+                eslids = esls.iter()
+                    .filter_map(|esl| esl.get("esl_id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    .collect();
+            }
+        }
+    }
+    println!("在线价签个数：{}", eslids.len());
+    Ok(eslids)
+}
+
+// 快速闪灯：根据 n 的奇偶构造不同的 JSON 数据，发送 PUT 请求到控制接口
+async fn quickflash(client: &Client, ew_ip: &str, n: i32, esl: &str, port: &str, store_name: &str) -> Result<(), Box<dyn Error>> {
+    let data = if n % 2 == 0 {
+        json!({
+            "sid": "3984799300029881",
+            "priority": 10,
+            "back_url": "http://127.0.0.1:8081/backurl",
+            "switch_page": {
+                "page_id": 0,
+                "stay_time": 100 * 30
+            },
+            "flash_light": {
+                "colors": ["yellow"],
+                "on_time": "255",
+                "off_time": "255",
+                "flash_count": "1",
+                "sleep_time": "30",
+                "loop_count": "1"
+            },
+            "led_rule": "1",
+            "operation_type": "3"
+        })
+    } else {
+        json!({
+            "sid": "3984799300029881",
+            "priority": 10,
+            "back_url": "http://127.0.0.1:8089/backurl",
+            "switch_page": {
+                "page_id": 2,
+                "stay_time": 60
+            },
+            "flash_light": {
+                "colors": ["red"],
+                "on_time": "255",
+                "off_time": "255",
+                "flash_count": "2",
+                "sleep_time": "30",
+                "loop_count": "1"
+            },
+            "led_rule": "0",
+            "operation_type": "3"
+        })
+    };
+    let url = format!("http://{}:{}/api3/{}/esls/{}/control", ew_ip, port, store_name, esl);
+    let resp = client.put(&url).json(&data).send().await?;
+    let text = resp.text().await?;
+    println!("quickflash response: {}", text);
+    Ok(())
+}
+
+// 主函数：调用各个功能模块
+// #[tokio::main]
+// async fn main() -> Result<(), Box<dyn Error>> {
+//     // 配置参数（可根据实际情况修改）
+//     let ew_ip = "127.0.0.1";
+//     let port = "9000";
+    
+//     let client = Client::new();
+    
+//     // 获取门店名称
+//     let store_name = get_store_name(&client, ew_ip, port).await?;
+//     println!("门店名为：{}", store_name);
+    
+//     // 获取 AP 版本与 IP 地址
+//     let (ap_version, ap_ip) = get_aps_version(&client, ew_ip, port, &store_name).await?;
+//     println!("AP版本为：{}，IP地址为：{}", ap_version, ap_ip);
+    
+//     // 获取 ESL 列表（在线价签 ID）
+//     let eslids = get_esl_version(&client, ew_ip, port, &store_name).await?;
+    
+//     // 示例：对第一个 ESL 执行 quickflash 操作
+//     if let Some(esl) = eslids.first() {
+//         quickflash(&client, ew_ip, 2, esl, port, &store_name).await?;
+//     }
+    
+//     // 其他功能（如点对点升级、解密、修改门店、组网、更新屏幕模板等）可按类似方式实现，
+//     // 根据业务接口构造相应的 JSON 数据，并使用 client.get/post/put 发起请求，
+//     // 然后解析返回的 JSON 数据进行处理。
+    
+//     Ok(())
+// }

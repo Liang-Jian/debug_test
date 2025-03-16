@@ -1,0 +1,32 @@
+control:
+  year: 2021                      #
+  level: C
+  round: 2
+
+css:
+  level_css: //span[@class='matchVsTitle__league']/text()
+  sj_css: body > div.content.clearfix > div.main > section > section > h3 > span.matchVsTitle__date
+
+
+db:
+  host: 101.201.81.174
+  port: 3306
+  dbname: jleague
+  user: root
+  password: 1qaz#EDC
+
+
+sql:
+  1: select round,sum(zc+kc) from j22 where level='A' group by round
+  2: select round,count(*) from j22 where (zj =kj) and level ='A' group by round
+  3: select * from j22 where level='A' and (zj+kj = 0)
+  4: select * from j22 where level='A' and left(bc,1.txt)+right(bc,1) <= 1 and round=1
+  # 所有半场进球书大于1。5的
+  5: select count(*) from j22 where level='A' and (left(bc,1.txt)+right(bc,1.txt)) > 1.5
+  # 平局
+  6: select * from j22 where level='A' and (zj = kj) group by round
+  # 每轮没有进球的
+  7: select round ,count(*) from j22 where level='A' and (zj+kj = 0)  group by round;
+  # pingjugailv
+  8: select * from j22 where level='A' and (zj = kj)
+  9:

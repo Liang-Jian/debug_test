@@ -1,0 +1,22 @@
+conf:
+  ew: 127.0.0.1.txt:9000
+  pic_path: D:\Show\src\tuan.jpg
+  pic_dir: D:\pic
+  esl_xlsx: D:\debug_test2\test\esl.xlsx
+  weight: 4
+  high: 4
+  eslnum: 16
+  output_dir: D:\bbit_round2\eslw_v5-5.0.1.txt\users\_res\templates\sct     # 单页模板互动
+  output_dir_m: D:\bbit_round2\eslw_v5-5.0.1.txt\users\_res\templates\sctm  # 多页循环切
+  switch_round: 10       # 切页轮数 四页算一轮
+#  max_page: 8             # 最大页数
+  tx_time: 45            # 页与页直接的间隔时间 s
+  dst_dir:
+    - D:\New_York
+    - D:\London
+    - D:\Paris
+    - D:\Sydney
+    - D:\Tokyo
+    - D:\Amsterdam
+    - D:\Beijing
+    - D:\Dusseldorf

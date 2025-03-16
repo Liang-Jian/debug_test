@@ -1,0 +1,23 @@
+#[package]
+#name = "debug_test_rust"
+#version = "0.1.0"
+#edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+#[dependencies]
+
+
+
+[workspace]
+resolver = "2"
+members = [ 
+    "crates/jiekou", 
+    "crates/jleague",
+    "crates/poc", 
+    "crates/saas", 
+    "crates/sam", 
+    "crates/sandaitongji",
+
+]
+lto = false # 链接优化，删除未使用代码

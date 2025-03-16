@@ -1,0 +1,8 @@
+[target.aarch64-unknown-linux-musl]
+image = "aarch64-rust"
+
+[target.x86_64-pc-windows-gnu ]
+image = "windows-rust"
+
+[target.arm-unknown-linux-musleabihf]
+image = "arm32-rust"
