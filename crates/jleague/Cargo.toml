@@ -1,7 +1,7 @@
 [package]
 name = "jleague"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking", "json"] }
@@ -19,6 +19,6 @@ serde_yaml = "0.8"
 fern = "0.7"
 scraper = "0.13"
 log = "0.4"
-headless_chrome = "1.0"
 sqlx = { version = "0.6", features = ["mysql", "runtime-tokio-native-tls"] }
 lettre = "0.10"
+headless_chrome = "1.0.6"
